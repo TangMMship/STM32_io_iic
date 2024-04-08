@@ -1,0 +1,5 @@
+"E:\workspace\clion\CLion 2021.3.4\bin\cmake\win\bin\cmake.exe" -DCMAKE_BUILD_TYPE=Debug "-DCMAKE_MAKE_PROGRAM=E:/workspace/clion/CLion 2021.3.4/bin/ninja/win/ninja.exe" -G Ninja E:\workspace\clion\CLionProjects\STM32_io_iic
+-- Minimal optimization, debug info included
+-- Configuring done
+-- Generating done
+-- Build files have been written to: E:/workspace/clion/CLionProjects/STM32_io_iic/cmake-build-debug
