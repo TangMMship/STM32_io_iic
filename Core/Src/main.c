@@ -18,10 +18,10 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "retarget.h"
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "retarget.h"
 #define SCL GPIO_PIN_8
 #define SDA GPIO_PIN_9
 
@@ -87,6 +87,8 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+TIM_HandleTypeDef htim1;
+
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
@@ -101,6 +103,7 @@ UART_HandleTypeDef huart1;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART1_UART_Init(void);
+static void MX_TIM1_Init(void);
 /* USER CODE BEGIN PFP */
 #ifdef __GNUC__
 #define PUTCHAR_PROTOTYPE int __io_putchar(int ch)
@@ -124,25 +127,26 @@ uint8_t Wait_ack();
 uint8_t IIC_Readbyte(unsigned char ack);
 void IIC_Sendack();
 void IIC_Nsendack();
+void Delay_uS(uint16_t uS_Count)
+{
+    uint16_t counter = 0;                         /*暂存定时器的计数值*/
+    __HAL_TIM_SET_AUTORELOAD(&htim1, uS_Count);   /*设置定时器自动加载值，到该值后重新计数*/
+    __HAL_TIM_SET_COUNTER(&htim1, 0);             /*设置定时器初始值*/
+    HAL_TIM_Base_Start(&htim1);                   /*启动定时器*/
+    while(counter < uS_Count)                     /*直到定时器计数从0计数到uS_Count结束循环,刚好uS_Count uS*/
+    {
+        counter = __HAL_TIM_GET_COUNTER(&htim1);    /*获取定时器当前计数*/
+    }
+    HAL_TIM_Base_Stop(&htim1);                    /*停止定时器*/
+}
 
 /*
 
 
 
 */
-
-void bmp280()
-{
-    uint8_t readb;
-    for(int i=0;i<10;i++)
-    HAL_Delay(41);
-    IIC_Start();
-    IIC_Sendbyte(0x71);
-    Wait_ack();
-    readb=IIC_Readbyte(1);
-    printf("%s",readb);
-
-}
+#define	AHT20_INIT_COMD  		0xBE
+void bmp280();
 /* USER CODE END 0 */
 
 /**
@@ -176,17 +180,17 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART1_UART_Init();
+  MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
     RetargetInit(&huart1);
-
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+      bmp280();
     /* USER CODE END WHILE */
-      printf("hello\r\n");
 
     /* USER CODE BEGIN 3 */
   }
@@ -230,6 +234,52 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief TIM1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM1_Init(void)
+{
+
+  /* USER CODE BEGIN TIM1_Init 0 */
+
+  /* USER CODE END TIM1_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM1_Init 1 */
+
+  /* USER CODE END TIM1_Init 1 */
+  htim1.Instance = TIM1;
+  htim1.Init.Prescaler = 72;
+  htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim1.Init.Period = 0;
+  htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim1.Init.RepetitionCounter = 0;
+  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim1, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM1_Init 2 */
+
+  /* USER CODE END TIM1_Init 2 */
+
 }
 
 /**
@@ -303,12 +353,12 @@ static void MX_GPIO_Init(void)
 void IIC_Start()
 {
     IIC_SDA=1;
-    HAL_Delay(5);
+    Delay_uS(5);
     IIC_SCL=1;
-    //修改了HAL_Delay函数  此时延时单位us
-    HAL_Delay(5);
+    //修改了Delay_uS(数  此时延时单位us
+    Delay_uS(5);
     IIC_SDA=0;
-    HAL_Delay(5);   //开始信号
+    Delay_uS(5);   //开始信号
     IIC_SCL=0;            //SCL拉低可以传输信号
 }
 /*IIC停止信号
@@ -321,11 +371,11 @@ void IIC_Stop()
 {
     IIC_SCL=0;
     IIC_SDA=0;
-    HAL_Delay(4);
+    Delay_uS(4);
     IIC_SCL=1;
-    HAL_Delay(2);
+    Delay_uS(2);
     IIC_SDA=1;
-    HAL_Delay(4);
+    Delay_uS(4);
 }
 
 /*等待应答
@@ -336,9 +386,9 @@ uint8_t Wait_ack()
 {
     uint8_t count=0;   //滤波系数  防止电平跳变的影响
     IIC_SDA=1;       //不用SDA时都要为高阻态，只有传输信号的设备SDA可以拉低，因为是开漏，所以SDA整条线都会拉低,因此一次只能有一个设备发送消息
-    HAL_Delay(1);
+    Delay_uS(1);
     IIC_SCL=1;       //读数据
-    HAL_Delay(1);
+    Delay_uS(1);
     while(IIC_SDA)
     {
         count++;
@@ -378,11 +428,11 @@ uint8_t IIC_Readbyte(unsigned char ack)
     for(i=0;i<8;i++)
     {
         IIC_SCL=0;
-        HAL_Delay(2);    //一般iic传输速率100kb，差不多1.25us  高速400kb
+        Delay_uS(2);    //一般iic传输速率100kb，差不多1.25us  高速400kb
         IIC_SCL=1;
         rebyte<<=1;
         rebyte|=IIC_SDA;
-        HAL_Delay(1);
+        Delay_uS(1);
         if(ack)
         {
             IIC_Sendack();
@@ -402,19 +452,39 @@ void IIC_Sendack()
 {
     IIC_SCL=0;
     IIC_SDA=0;                  //拉高SDA产生非应答信号
-    HAL_Delay(4);
+    Delay_uS(4);
     IIC_SCL=1;
-    HAL_Delay(4);         //完成应答
+    Delay_uS(4);         //完成应答
     IIC_SCL=0;                  //等待下次信号
 }
 void IIC_Nsendack()
 {
     IIC_SCL=0;
     IIC_SDA=1;                  //拉高SDA产生非应答信号
-    HAL_Delay(4);
+    Delay_uS(4);
     IIC_SCL=1;
-    HAL_Delay(4);         //完成应答
+    Delay_uS(4);         //完成应答
     IIC_SCL=0;                  //等待下次信号
+}
+
+void bmp280()
+{
+    uint8_t readb;
+    for(int i=0;i<10;i++)
+    Delay_uS(41);
+    IIC_Start();
+    IIC_Sendbyte(0x71);
+    Wait_ack();
+    readb=IIC_Readbyte(1);
+    IIC_Sendbyte(0X70);
+    Wait_ack();
+    IIC_Sendbyte(AHT20_INIT_COMD );
+    Wait_ack();
+    HAL_Delay(10);
+    readb=IIC_Readbyte(1);
+    printf("%x%x",readb,IIC_Readbyte(1));
+
+
 }
 /* USER CODE END 4 */
 
